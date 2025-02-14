@@ -1,8 +1,11 @@
 """API client for Whoop."""
-from typing import Any, Dict, Optional
+import asyncio
+import logging
+from datetime import datetime, timedelta
+from typing import Dict, Optional, Any
+
 import aiohttp
 import async_timeout
-import logging
 
 from .const import (
     API_BASE_URL,
@@ -13,11 +16,34 @@ from .const import (
     ENDPOINT_USER,
     ERROR_AUTH,
     ERROR_CONNECTION,
+    ERROR_EXPIRED_TOKEN,
+    OAUTH_TOKEN_URL,
+    TOKEN_EXPIRY_BUFFER,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 class WhoopApiClient:
+    """API client for Whoop."""
+
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        session: aiohttp.ClientSession,
+        access_token: Optional[str] = None,
+        refresh_token: Optional[str] = None,
+        token_expiry: Optional[datetime] = None,
+    ) -> None:
+        """Initialize the API client."""
+        self._client_id = client_id
+        self._client_secret = client_secret
+        self._session = session
+        self._access_token = access_token
+        self._refresh_token = refresh_token
+        self._token_expiry = token_expiry
+        self._headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
+
     async def get_token_from_code(self, code: str, redirect_uri: str) -> dict:
         """Exchange authorization code for tokens."""
         data = {
@@ -41,11 +67,12 @@ class WhoopApiClient:
                 response.raise_for_status()
                 token_data = await response.json()
                 
-                # Verify the token works by making a test API call
                 self._access_token = token_data["access_token"]
+                self._refresh_token = token_data["refresh_token"]
+                self._token_expiry = datetime.now() + timedelta(seconds=token_data["expires_in"])
                 self._headers["Authorization"] = f"Bearer {self._access_token}"
                 
-                # Test API access
+                # Verify the token works
                 await self.get_user()
                 
                 return token_data
@@ -55,41 +82,14 @@ class WhoopApiClient:
         except asyncio.TimeoutError as err:
             raise WhoopConnectionError(ERROR_CONNECTION) from err
 
-    async def _async_request(
-        self,
-        method: str,
-        endpoint: str,
-        params: Optional[Dict] = None,
-    ) -> Any:
-        """Make an API request."""
-        url = f"{API_BASE_URL}{endpoint}"
+    async def refresh_access_token(self) -> dict:
+        """Refresh the access token."""
+        if not self._refresh_token:
+            raise WhoopAuthError("No refresh token available")
 
-        try:
-            async with async_timeout.timeout(DEFAULT_TIMEOUT):
-                response = await self._session.request(
-                    method,
-                    url,
-                    headers=self._headers,
-                    params=params,
-                )
-                
-                if response.status == 401:
-                    raise WhoopAuthError(ERROR_AUTH)
-                elif response.status == 404 and "Subscription not found" in await response.text():
-                    raise WhoopSubscriptionError("Active Whoop subscription required")
-                
-                response.raise_for_status()
-                return await response.json()
-
-        except aiohttp.ClientError as err:
-            raise WhoopConnectionError(ERROR_CONNECTION) from err
-        except asyncio.TimeoutError as err:
-            raise WhoopConnectionError(ERROR_CONNECTION) from err
-            
-    async def get_access_token(self) -> str:
-        """Get OAuth access token."""
         data = {
-            "grant_type": "client_credentials",
+            "grant_type": "refresh_token",
+            "refresh_token": self._refresh_token,
             "client_id": self._client_id,
             "client_secret": self._client_secret,
         }
@@ -105,12 +105,14 @@ class WhoopApiClient:
                     raise WhoopAuthError(ERROR_AUTH)
                 
                 response.raise_for_status()
-                result = await response.json()
+                token_data = await response.json()
                 
-                self._access_token = result.get("access_token")
+                self._access_token = token_data["access_token"]
+                self._refresh_token = token_data.get("refresh_token", self._refresh_token)
+                self._token_expiry = datetime.now() + timedelta(seconds=token_data["expires_in"])
                 self._headers["Authorization"] = f"Bearer {self._access_token}"
                 
-                return self._access_token
+                return token_data
 
         except aiohttp.ClientError as err:
             raise WhoopConnectionError(ERROR_CONNECTION) from err
@@ -124,6 +126,9 @@ class WhoopApiClient:
         params: Optional[Dict] = None,
     ) -> Any:
         """Make an API request."""
+        if self._token_expiry and datetime.now() + timedelta(seconds=TOKEN_EXPIRY_BUFFER) >= self._token_expiry:
+            await self.refresh_access_token()
+
         url = f"{API_BASE_URL}{endpoint}"
 
         try:
@@ -136,7 +141,17 @@ class WhoopApiClient:
                 )
                 
                 if response.status == 401:
-                    raise WhoopAuthError(ERROR_AUTH)
+                    if self._refresh_token:
+                        await self.refresh_access_token()
+                        # Retry the request with new token
+                        response = await self._session.request(
+                            method,
+                            url,
+                            headers=self._headers,
+                            params=params,
+                        )
+                    else:
+                        raise WhoopAuthError(ERROR_EXPIRED_TOKEN)
                 
                 response.raise_for_status()
                 return await response.json()
@@ -181,3 +196,7 @@ class WhoopAuthError(WhoopError):
 
 class WhoopConnectionError(WhoopError):
     """Connection error."""
+
+
+class WhoopSubscriptionError(WhoopError):
+    """Subscription error."""

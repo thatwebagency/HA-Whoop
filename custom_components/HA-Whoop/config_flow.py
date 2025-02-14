@@ -2,6 +2,7 @@
 from typing import Any
 import secrets
 import voluptuous as vol
+import aiohttp
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_CLIENT_ID, CONF_CLIENT_SECRET
@@ -16,6 +17,10 @@ from .const import (
     OAUTH_TOKEN_URL,
     AUTH_CALLBACK_PATH,
     AUTH_CALLBACK_NAME,
+    CONF_ACCESS_TOKEN,
+    CONF_REFRESH_TOKEN,
+    CONF_TOKEN_EXPIRY,
+    OAUTH_SCOPES,
 )
 
 class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -28,40 +33,42 @@ class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._client_id: str | None = None
         self._client_secret: str | None = None
         self._state: str | None = None
+        self._token_info: dict | None = None
 
     async def async_step_user(
-    self, user_input: dict[str, Any] | None = None
-) -> FlowResult:
-    """Handle the initial step."""
-    errors = {}
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the initial step."""
+        errors = {}
 
-    if user_input is not None:
-        self._client_id = user_input[CONF_CLIENT_ID]
-        self._client_secret = user_input[CONF_CLIENT_SECRET]
-        self._state = secrets.token_urlsafe(16)
+        if user_input is not None:
+            self._client_id = user_input[CONF_CLIENT_ID]
+            self._client_secret = user_input[CONF_CLIENT_SECRET]
+            
+            # Check if already configured
+            await self.async_set_unique_id(self._client_id)
+            self._abort_if_unique_id_configured()
 
-        # Register callback
-        self.hass.http.register_view(WhoopAuthCallbackView())
+            self._state = secrets.token_urlsafe(16)
 
-        # Generate authorization URL with all required scopes
-        authorize_url = (
-            f"{OAUTH_AUTHORIZE_URL}"
-            f"?client_id={self._client_id}"
-            f"&redirect_uri={self.hass.config.api.base_url}{AUTH_CALLBACK_PATH}"
-            f"&response_type=code"
-            f"&state={self._state}"
-            f"&scope=offline"  # Add all required scopes
-            f"%20read:recovery"
-            f"%20read:sleep"
-            f"%20read:profile"
-            f"%20read:workout"
-            f"%20read:body_measurement"
-        )
+            # Register callback
+            self.hass.http.register_view(WhoopAuthCallbackView())
 
-        return self.async_external_step(
-            step_id="auth",
-            url=authorize_url,
-        )
+            # Generate authorization URL with all required scopes
+            scope_string = "%20".join(OAUTH_SCOPES)
+            authorize_url = (
+                f"{OAUTH_AUTHORIZE_URL}"
+                f"?client_id={self._client_id}"
+                f"&redirect_uri={self.hass.config.api.base_url}{AUTH_CALLBACK_PATH}"
+                f"&response_type=code"
+                f"&state={self._state}"
+                f"&scope={scope_string}"
+            )
+
+            return self.async_external_step(
+                step_id="auth",
+                url=authorize_url,
+            )
 
         return self.async_show_form(
             step_id="user",
@@ -78,6 +85,12 @@ class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the auth callback."""
+        if not self.context.get("code"):
+            return self.async_abort(reason="missing_code")
+
+        if self.context.get("state") != self._state:
+            return self.async_abort(reason="invalid_state")
+
         return self.async_external_step_done(next_step_id="finish")
 
     async def async_step_finish(
@@ -85,16 +98,16 @@ class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle completion of the OAuth flow."""
         if not self.context.get("code"):
-            return self.async_abort(reason="no_code")
+            return self.async_abort(reason="missing_code")
 
         client = WhoopApiClient(
-            async_get_clientsession(self.hass),
             client_id=self._client_id,
             client_secret=self._client_secret,
+            session=async_get_clientsession(self.hass),
         )
 
         try:
-            token = await client.get_token_from_code(
+            token_info = await client.get_token_from_code(
                 self.context["code"],
                 f"{self.hass.config.api.base_url}{AUTH_CALLBACK_PATH}",
             )
@@ -104,7 +117,9 @@ class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data={
                     CONF_CLIENT_ID: self._client_id,
                     CONF_CLIENT_SECRET: self._client_secret,
-                    "token": token,
+                    CONF_ACCESS_TOKEN: token_info["access_token"],
+                    CONF_REFRESH_TOKEN: token_info["refresh_token"],
+                    CONF_TOKEN_EXPIRY: token_info["expires_in"],
                 },
             )
         except WhoopAuthError:
@@ -112,19 +127,26 @@ class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except WhoopConnectionError:
             return self.async_abort(reason="cannot_connect")
 
+    async def async_step_reauth(self, user_input=None):
+        """Handle reauthorization."""
+        return await self.async_step_user()
 
-class WhoopAuthCallbackView:
+
+class WhoopAuthCallbackView(aiohttp.web.View):
     """Whoop Authorization Callback View."""
 
     url = AUTH_CALLBACK_PATH
     name = AUTH_CALLBACK_NAME
     requires_auth = False
 
-    async def get(self, request):
+    async def get(self):
         """Handle authorization callback."""
-        hass = request.app["hass"]
-        state = request.query.get("state")
-        code = request.query.get("code")
+        hass = self.request.app["hass"]
+        state = self.request.query.get("state")
+        code = self.request.query.get("code")
+
+        if not code:
+            return aiohttp.web.Response(status=400, text="No code provided")
 
         for flow in hass.config_entries.flow.async_progress():
             if (
@@ -139,4 +161,4 @@ class WhoopAuthCallbackView:
                     text="Authorization completed. You can close this window."
                 )
 
-        return aiohttp.web.Response(status=400)
+        return aiohttp.web.Response(status=400, text="Invalid state")
