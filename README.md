@@ -44,14 +44,14 @@ This is a custom component for Home Assistant that integrates with the Whoop API
 
 ## Available Sensors
 
-| Sensor | Description | Unit |
-|--------|-------------|------|
-| Recovery Score | Daily recovery percentage | % |
-| Sleep Score | Sleep quality score | % |
-| Sleep Duration | Total sleep time | hours |
-| Strain Score | Daily strain level | score |
-| Resting Heart Rate | Resting heart rate | bpm |
-
+| Sensor             | Description               | Unit  |
+|--------------------|---------------------------|-------|
+| Recovery Score     | Daily recovery percentage |   %   |
+| Sleep Score        | Sleep quality score       |   %   |
+| Sleep Duration     | Total sleep time          | hours |
+| Strain Score       | Daily strain level        | score |
+| Resting Heart Rate | Resting heart rate        |  bpm  |
+|--------------------|---------------------------|-------|
 ## Troubleshooting
 
 ### Common Issues
