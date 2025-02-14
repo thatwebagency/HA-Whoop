@@ -18,58 +18,74 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 class WhoopApiClient:
-    """API client for Whoop."""
+    async def get_token_from_code(self, code: str, redirect_uri: str) -> dict:
+        """Exchange authorization code for tokens."""
+        data = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
+            "redirect_uri": redirect_uri,
+        }
 
-    def __init__(
+        try:
+            async with async_timeout.timeout(DEFAULT_TIMEOUT):
+                response = await self._session.post(
+                    OAUTH_TOKEN_URL,
+                    data=data,
+                )
+                
+                if response.status == 401:
+                    raise WhoopAuthError(ERROR_AUTH)
+                
+                response.raise_for_status()
+                token_data = await response.json()
+                
+                # Verify the token works by making a test API call
+                self._access_token = token_data["access_token"]
+                self._headers["Authorization"] = f"Bearer {self._access_token}"
+                
+                # Test API access
+                await self.get_user()
+                
+                return token_data
+
+        except aiohttp.ClientError as err:
+            raise WhoopConnectionError(ERROR_CONNECTION) from err
+        except asyncio.TimeoutError as err:
+            raise WhoopConnectionError(ERROR_CONNECTION) from err
+
+    async def _async_request(
         self,
-        session: aiohttp.ClientSession,
-        client_id: str = None,
-        client_secret: str = None,
-        access_token: str = None,
-    ) -> None:
-        """Initialize the API client."""
-        self._session = session
-        self._client_id = client_id
-        self._client_secret = client_secret
-        self._access_token = access_token
-        self._headers = {}
-        if access_token:
-            self._headers["Authorization"] = f"Bearer {access_token}"
-        self._headers["Content-Type"] = "application/json"
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+    ) -> Any:
+        """Make an API request."""
+        url = f"{API_BASE_URL}{endpoint}"
 
-async def get_token_from_code(self, code: str, redirect_uri: str) -> dict:
-    """Exchange authorization code for tokens."""
-    data = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "client_id": self._client_id,
-        "client_secret": self._client_secret,
-        "redirect_uri": redirect_uri,
-    }
+        try:
+            async with async_timeout.timeout(DEFAULT_TIMEOUT):
+                response = await self._session.request(
+                    method,
+                    url,
+                    headers=self._headers,
+                    params=params,
+                )
+                
+                if response.status == 401:
+                    raise WhoopAuthError(ERROR_AUTH)
+                elif response.status == 404 and "Subscription not found" in await response.text():
+                    raise WhoopSubscriptionError("Active Whoop subscription required")
+                
+                response.raise_for_status()
+                return await response.json()
 
-    try:
-        async with async_timeout.timeout(DEFAULT_TIMEOUT):
-            response = await self._session.post(
-                OAUTH_TOKEN_URL,
-                data=data,
-            )
+        except aiohttp.ClientError as err:
+            raise WhoopConnectionError(ERROR_CONNECTION) from err
+        except asyncio.TimeoutError as err:
+            raise WhoopConnectionError(ERROR_CONNECTION) from err
             
-            if response.status == 401:
-                raise WhoopAuthError(ERROR_AUTH)
-            
-            response.raise_for_status()
-            token_data = await response.json()
-            
-            self._access_token = token_data["access_token"]
-            self._headers["Authorization"] = f"Bearer {self._access_token}"
-            
-            return token_data
-
-    except aiohttp.ClientError as err:
-        raise WhoopConnectionError(ERROR_CONNECTION) from err
-    except asyncio.TimeoutError as err:
-        raise WhoopConnectionError(ERROR_CONNECTION) from err
-
     async def get_access_token(self) -> str:
         """Get OAuth access token."""
         data = {

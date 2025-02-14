@@ -30,33 +30,38 @@ class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._state: str | None = None
 
     async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle the initial step."""
-        errors = {}
+    self, user_input: dict[str, Any] | None = None
+) -> FlowResult:
+    """Handle the initial step."""
+    errors = {}
 
-        if user_input is not None:
-            self._client_id = user_input[CONF_CLIENT_ID]
-            self._client_secret = user_input[CONF_CLIENT_SECRET]
-            self._state = secrets.token_urlsafe(16)
+    if user_input is not None:
+        self._client_id = user_input[CONF_CLIENT_ID]
+        self._client_secret = user_input[CONF_CLIENT_SECRET]
+        self._state = secrets.token_urlsafe(16)
 
-            # Register callback
-            self.hass.http.register_view(WhoopAuthCallbackView())
+        # Register callback
+        self.hass.http.register_view(WhoopAuthCallbackView())
 
-            # Generate authorization URL
-            authorize_url = (
-                f"{OAUTH_AUTHORIZE_URL}"
-                f"?client_id={self._client_id}"
-                f"&redirect_uri={self.hass.config.api.base_url}{AUTH_CALLBACK_PATH}"
-                f"&response_type=code"
-                f"&state={self._state}"
-                f"&scope=offline read:recovery read:sleep read:workout"
-            )
+        # Generate authorization URL with all required scopes
+        authorize_url = (
+            f"{OAUTH_AUTHORIZE_URL}"
+            f"?client_id={self._client_id}"
+            f"&redirect_uri={self.hass.config.api.base_url}{AUTH_CALLBACK_PATH}"
+            f"&response_type=code"
+            f"&state={self._state}"
+            f"&scope=offline"  # Add all required scopes
+            f"%20read:recovery"
+            f"%20read:sleep"
+            f"%20read:profile"
+            f"%20read:workout"
+            f"%20read:body_measurement"
+        )
 
-            return self.async_external_step(
-                step_id="auth",
-                url=authorize_url,
-            )
+        return self.async_external_step(
+            step_id="auth",
+            url=authorize_url,
+        )
 
         return self.async_show_form(
             step_id="user",
