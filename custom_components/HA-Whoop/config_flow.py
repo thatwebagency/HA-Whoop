@@ -3,13 +3,13 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_ACCESS_TOKEN
+from homeassistant.const import CONF_CLIENT_ID, CONF_CLIENT_SECRET
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
 from .api import WhoopApiClient, WhoopAuthError, WhoopConnectionError
-from .const import DOMAIN, CONF_CLIENT_ID, CONF_CLIENT_SECRET
+from .const import DOMAIN, OAUTH_AUTHORIZE_URL, OAUTH_TOKEN_URL
 
 class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Whoop."""
@@ -24,17 +24,23 @@ class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
+                session = async_get_clientsession(self.hass)
                 client = WhoopApiClient(
-                    async_get_clientsession(self.hass),
-                    user_input[CONF_ACCESS_TOKEN],
+                    session,
+                    client_id=user_input[CONF_CLIENT_ID],
+                    client_secret=user_input[CONF_CLIENT_SECRET],
                 )
 
-                # Validate the token
-                if await client.validate_token():
+                # Get OAuth token
+                token = await client.get_access_token()
+                
+                if token:
                     return self.async_create_entry(
                         title="Whoop",
                         data={
-                            CONF_ACCESS_TOKEN: user_input[CONF_ACCESS_TOKEN],
+                            CONF_CLIENT_ID: user_input[CONF_CLIENT_ID],
+                            CONF_CLIENT_SECRET: user_input[CONF_CLIENT_SECRET],
+                            "token": token,
                         },
                     )
                 else:
@@ -51,12 +57,9 @@ class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_ACCESS_TOKEN): cv.string,
+                    vol.Required(CONF_CLIENT_ID): cv.string,
+                    vol.Required(CONF_CLIENT_SECRET): cv.string,
                 }
             ),
             errors=errors,
         )
-
-    async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
-        """Handle reauthorization."""
-        return await self.async_step_user()

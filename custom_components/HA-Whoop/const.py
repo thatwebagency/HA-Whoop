@@ -7,7 +7,8 @@ SCAN_INTERVAL = 300  # 5 minutes
 # Configuration
 CONF_CLIENT_ID = "client_id"
 CONF_CLIENT_SECRET = "client_secret"
-
+OAUTH_AUTHORIZE_URL = "https://api.whoop.com/oauth/authorize"
+OAUTH_TOKEN_URL = "https://api.whoop.com/oauth/token"
 # API
 API_BASE_URL = "https://api.whoop.com/v1"
 API_TOKEN_URL = "https://api.whoop.com/oauth/token"

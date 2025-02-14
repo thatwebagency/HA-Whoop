@@ -3,9 +3,10 @@
         "step": {
             "user": {
                 "title": "Connect to Whoop",
-                "description": "Please enter your Whoop API access token.",
+                "description": "Please enter your Whoop API credentials",
                 "data": {
-                    "access_token": "Access Token"
+                    "client_id": "Client ID",
+                    "client_secret": "Client Secret"
                 }
             }
         },
@@ -13,11 +14,9 @@
             "cannot_connect": "Failed to connect to Whoop API",
             "invalid_auth": "Invalid authentication",
             "unknown": "Unexpected error occurred"
-        },
-        "abort": {
-            "already_configured": "Whoop account is already configured"
         }
     },
+
     "entity": {
         "sensor": {
             "recovery_score": {
