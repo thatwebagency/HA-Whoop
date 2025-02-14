@@ -1,6 +1,7 @@
 """Config flow for Whoop integration."""
 from typing import Any
 import secrets
+from datetime import datetime, timedelta
 import voluptuous as vol
 import aiohttp
 
@@ -33,7 +34,6 @@ class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._client_id: str | None = None
         self._client_secret: str | None = None
         self._state: str | None = None
-        self._token_info: dict | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -112,6 +112,9 @@ class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 f"{self.hass.config.api.base_url}{AUTH_CALLBACK_PATH}",
             )
 
+            # Calculate expiry timestamp
+            expiry_timestamp = int((datetime.now() + timedelta(seconds=token_info["expires_in"])).timestamp())
+
             return self.async_create_entry(
                 title="Whoop",
                 data={
@@ -119,7 +122,7 @@ class WhoopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_CLIENT_SECRET: self._client_secret,
                     CONF_ACCESS_TOKEN: token_info["access_token"],
                     CONF_REFRESH_TOKEN: token_info["refresh_token"],
-                    CONF_TOKEN_EXPIRY: token_info["expires_in"],
+                    CONF_TOKEN_EXPIRY: expiry_timestamp,
                 },
             )
         except WhoopAuthError:
@@ -139,11 +142,11 @@ class WhoopAuthCallbackView(aiohttp.web.View):
     name = AUTH_CALLBACK_NAME
     requires_auth = False
 
-    async def get(self):
+    async def get(self) -> aiohttp.web.Response:
         """Handle authorization callback."""
         hass = self.request.app["hass"]
-        state = self.request.query.get("state")
         code = self.request.query.get("code")
+        state = self.request.query.get("state")
 
         if not code:
             return aiohttp.web.Response(status=400, text="No code provided")
@@ -153,12 +156,13 @@ class WhoopAuthCallbackView(aiohttp.web.View):
                 flow["handler"] == DOMAIN
                 and flow["context"].get("state") == state
             ):
-                hass.config_entries.flow.async_configure(
+                await hass.config_entries.flow.async_configure(
                     flow["flow_id"],
                     {"code": code},
                 )
                 return aiohttp.web.Response(
-                    text="Authorization completed. You can close this window."
+                    text="<html><body>Authorization completed! You can close this window.</body></html>",
+                    content_type="text/html",
                 )
 
         return aiohttp.web.Response(status=400, text="Invalid state")

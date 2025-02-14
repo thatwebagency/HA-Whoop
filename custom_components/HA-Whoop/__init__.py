@@ -32,13 +32,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Whoop from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     
+    # Convert token_expiry to datetime if it's a timestamp
+    token_expiry = entry.data[CONF_TOKEN_EXPIRY]
+    if isinstance(token_expiry, (int, float)):
+        token_expiry = datetime.now() + timedelta(seconds=token_expiry)
+    
     client = WhoopApiClient(
         client_id=entry.data[CONF_CLIENT_ID],
         client_secret=entry.data[CONF_CLIENT_SECRET],
         session=async_get_clientsession(hass),
         access_token=entry.data[CONF_ACCESS_TOKEN],
         refresh_token=entry.data[CONF_REFRESH_TOKEN],
-        token_expiry=datetime.fromtimestamp(entry.data[CONF_TOKEN_EXPIRY])
+        token_expiry=token_expiry
     )
 
     coordinator = WhoopDataUpdateCoordinator(
@@ -50,7 +55,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await coordinator.async_config_entry_first_refresh()
     except ConfigEntryAuthFailed:
-        # If first refresh fails with auth error, trigger reauth flow
         _LOGGER.error("Authentication failed. Please reauthenticate.")
         raise ConfigEntryAuthFailed
 
@@ -95,12 +99,15 @@ class WhoopDataUpdateCoordinator(DataUpdateCoordinator):
                 if not await self.client.validate_token():
                     try:
                         token_info = await self.client.refresh_access_token()
+                        # Calculate actual expiry timestamp for storage
+                        expiry_timestamp = int((datetime.now() + timedelta(seconds=token_info["expires_in"])).timestamp())
+                        
                         # Update config entry with new tokens
                         new_data = {
                             **self.entry.data,
                             CONF_ACCESS_TOKEN: token_info["access_token"],
                             CONF_REFRESH_TOKEN: token_info.get("refresh_token", self.entry.data[CONF_REFRESH_TOKEN]),
-                            CONF_TOKEN_EXPIRY: token_info["expires_in"],
+                            CONF_TOKEN_EXPIRY: expiry_timestamp,
                         }
                         self.hass.config_entries.async_update_entry(
                             self.entry,
