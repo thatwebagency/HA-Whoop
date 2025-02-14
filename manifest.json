@@ -1,0 +1,13 @@
+{
+    "domain": "whoop",
+    "name": "HA Whoop",
+    "config_flow": true,
+    "documentation": "https://github.com/thatwebagency/ha-whoop",
+    "issue_tracker": "https://github.com/thatwebagency/ha-whoop/issues",
+    "requirements": [],
+    "dependencies": [],
+    "codeowners": ["@thatwebagency"],
+    "iot_class": "cloud_polling",
+    "version": "1.0.0",
+    "integration_type": "device"
+  }

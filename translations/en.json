@@ -1,0 +1,48 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Connect to Whoop",
+                "description": "Please enter your Whoop API access token.",
+                "data": {
+                    "access_token": "Access Token"
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Failed to connect to Whoop API",
+            "invalid_auth": "Invalid authentication",
+            "unknown": "Unexpected error occurred"
+        },
+        "abort": {
+            "already_configured": "Whoop account is already configured"
+        }
+    },
+    "entity": {
+        "sensor": {
+            "recovery_score": {
+                "name": "Recovery Score",
+                "state_attributes": {
+                    "hrv": "Heart Rate Variability",
+                    "spo2": "Blood Oxygen Level"
+                }
+            },
+            "resting_heart_rate": {
+                "name": "Resting Heart Rate"
+            },
+            "sleep_score": {
+                "name": "Sleep Score",
+                "state_attributes": {
+                    "efficiency": "Sleep Efficiency",
+                    "disturbances": "Sleep Disturbances"
+                }
+            },
+            "sleep_duration": {
+                "name": "Sleep Duration"
+            },
+            "strain_score": {
+                "name": "Strain Score"
+            }
+        }
+    }
+}

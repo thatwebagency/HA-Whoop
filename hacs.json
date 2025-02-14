@@ -1,0 +1,8 @@
+{
+    "name": "Whoop Integration",
+    "render_readme": true,
+    "domain": "whoop",
+    "documentation": "https://github.com/thatwebagency/ha-whoop",
+    "issue_tracker": "https://github.com/thatwebagency/ha-whoop/issues",
+    "homeassistant": "2023.8.0"
+}

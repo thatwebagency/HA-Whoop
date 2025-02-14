@@ -1,0 +1,21 @@
+{
+    "config": {
+      "step": {
+        "user": {
+          "title": "Connect to Whoop",
+          "description": "Please enter your Whoop API access token.",
+          "data": {
+            "access_token": "Access Token"
+          }
+        }
+      },
+      "error": {
+        "cannot_connect": "Failed to connect to Whoop API",
+        "invalid_auth": "Invalid authentication",
+        "unknown": "Unexpected error occurred"
+      },
+      "abort": {
+        "already_configured": "Whoop account is already configured"
+      }
+    }
+  }
