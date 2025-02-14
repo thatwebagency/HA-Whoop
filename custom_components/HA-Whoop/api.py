@@ -37,6 +37,39 @@ class WhoopApiClient:
             self._headers["Authorization"] = f"Bearer {access_token}"
         self._headers["Content-Type"] = "application/json"
 
+async def get_token_from_code(self, code: str, redirect_uri: str) -> dict:
+    """Exchange authorization code for tokens."""
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": self._client_id,
+        "client_secret": self._client_secret,
+        "redirect_uri": redirect_uri,
+    }
+
+    try:
+        async with async_timeout.timeout(DEFAULT_TIMEOUT):
+            response = await self._session.post(
+                OAUTH_TOKEN_URL,
+                data=data,
+            )
+            
+            if response.status == 401:
+                raise WhoopAuthError(ERROR_AUTH)
+            
+            response.raise_for_status()
+            token_data = await response.json()
+            
+            self._access_token = token_data["access_token"]
+            self._headers["Authorization"] = f"Bearer {self._access_token}"
+            
+            return token_data
+
+    except aiohttp.ClientError as err:
+        raise WhoopConnectionError(ERROR_CONNECTION) from err
+    except asyncio.TimeoutError as err:
+        raise WhoopConnectionError(ERROR_CONNECTION) from err
+
     async def get_access_token(self) -> str:
         """Get OAuth access token."""
         data = {

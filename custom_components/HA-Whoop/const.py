@@ -13,7 +13,8 @@ OAUTH_TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
 API_BASE_URL = "https://api.prod.whoop.com/developer/v1/"
 API_TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
 API_AUTHORIZE_URL = "https://api.prod.whoop.com/oauth/oauth2/auth"
-
+AUTH_CALLBACK_PATH = "/api/whoop/callback"
+AUTH_CALLBACK_NAME = "api:whoop:callback"
 # Endpoints
 ENDPOINT_RECOVERY = "/recovery"
 ENDPOINT_SLEEP = "/sleep"

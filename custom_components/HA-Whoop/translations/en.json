@@ -3,7 +3,7 @@
         "step": {
             "user": {
                 "title": "Connect to Whoop",
-                "description": "Please enter your Whoop API credentials",
+                "description": "Please enter your Whoop API credentials. You can get these from the Whoop Developer Portal.",
                 "data": {
                     "client_id": "Client ID",
                     "client_secret": "Client Secret"
@@ -13,7 +13,12 @@
         "error": {
             "cannot_connect": "Failed to connect to Whoop API",
             "invalid_auth": "Invalid authentication",
-            "unknown": "Unexpected error occurred"
+            "unknown": "Unexpected error occurred",
+            "no_code": "No authorization code received from Whoop"
+        },
+        "abort": {
+            "already_configured": "Whoop account is already configured",
+            "no_code": "Did not receive authorization code from Whoop"
         }
     },
 
